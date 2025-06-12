@@ -50,7 +50,7 @@ class SpeechBERTScore(BaseMetric):
         feats = feats_hiddens[8]
         return feats  
     
-    def compute_metric(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
         """
         Args:
             gt_wav (np.ndarray): Ground truth waveform (T,).

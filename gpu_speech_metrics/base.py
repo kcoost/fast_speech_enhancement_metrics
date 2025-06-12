@@ -20,7 +20,7 @@ class BaseMetric(ABC):
             audio = self.resampler(audio)
         return audio
     
-    def prepare_inputs(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def prepare_inputs(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> tuple[torch.Tensor| None, torch.Tensor]:
         if clean_speech is not None and clean_speech.shape != denoised_speech.shape:
             raise Exception('`clean_speech` and `denoised_speech` should have the same shape.')
         
@@ -31,7 +31,7 @@ class BaseMetric(ABC):
         return clean_speech, denoised_speech
 
     @abstractmethod
-    def compute_metric(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
         raise NotImplementedError
     
     def __call__(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:

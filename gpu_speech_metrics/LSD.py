@@ -25,7 +25,8 @@ class LSD(BaseMetric):
                         return_complex=True)
         return spectrogram.abs()
     
-    def compute_metric(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+        assert clean_speech is not None
         scaling_factor = torch.sum(clean_speech * denoised_speech, dim=1, keepdim=True) / (torch.sum(denoised_speech**2, dim=1, keepdim=True) + self.eps)
         denoised_speech = denoised_speech * scaling_factor
 

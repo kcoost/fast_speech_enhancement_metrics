@@ -13,8 +13,7 @@ def graphmodule_to_sequential(gm: torch.fx.GraphModule) -> nn.Sequential:
 
 def create_dnsmos_weights(path: Path) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        model_path = tmpdir / "sig_bak_ovr.onnx"
+        model_path = Path(tmpdir) / "sig_bak_ovr.onnx"
         
         # Download model
         subprocess.run([

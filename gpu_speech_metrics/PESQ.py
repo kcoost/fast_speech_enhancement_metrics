@@ -224,7 +224,8 @@ class PESQ(BaseMetric):
         asymmetric_distance = self.get_overlapping_sums(asymmetric_disturbance)
         return symmetric_distance, asymmetric_distance
 
-    def compute_metric(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+        assert clean_speech is not None
         symmetric_distance, asymmetric_distance = self.get_disturbances(clean_speech, denoised_speech)
 
         # calculate MOS as combination of symmetric and asymmetric distance

@@ -69,22 +69,22 @@ class STOI(BaseMetric):
         spectrogram.masked_fill_(mask.unsqueeze(1), 0)
         return spectrogram
 
-    def overlap_and_add(self, frames: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
+    def overlap_and_add(self, frames: torch.Tensor, lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         final_lengths = (lengths + 1) * self.hop_length
-        max_length = torch.max(final_lengths)
+        max_length = int(torch.max(final_lengths).item())
         batch_size = len(final_lengths)
         
-        signal = torch.zeros((batch_size, max_length.item()), dtype=frames.dtype, device=frames.device)
+        signal = torch.zeros((batch_size, max_length), dtype=frames.dtype, device=frames.device)
 
         for i, frame in enumerate(frames.split(lengths.tolist())):
             # Vectorized version of
             # for i in range(num_frames):
             #     signal[i * hop_length:i * hop_length + frame_length] += x_frames[i]
-            idx = torch.arange(self.win_length, device=frames.device).unsqueeze(0) + self.hop_length * torch.arange(lengths[i], device=frames.device).unsqueeze(1)
+            idx = torch.arange(self.win_length, device=frames.device).unsqueeze(0) + self.hop_length * torch.arange(int(lengths[i].item()), device=frames.device).unsqueeze(1)
             signal[i] += signal[i].scatter_add(0, idx.flatten(), frame.flatten())
         return signal, final_lengths
 
-    def remove_silent_frames(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def remove_silent_frames(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # Compute Mask
         window = torch.hann_window(self.win_length + 1, dtype=clean_speech.dtype, device=clean_speech.device)[1:]
         window = window.unsqueeze(0).unsqueeze(0)
@@ -172,52 +172,8 @@ class STOI(BaseMetric):
         correlations_components *= mask.unsqueeze(2).unsqueeze(3)
         return torch.sum(correlations_components, dim=(1, 2, 3)) / (normalization*num_segments)
     
-    def compute_metric(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+        assert clean_speech is not None
         stois = self.compute_stoi(clean_speech, denoised_speech, extended=False)
         estois = self.compute_stoi(clean_speech, denoised_speech, extended=True)
         return [{"STOI": stoi.item(), "ESTOI": estoi.item()} for stoi, estoi in zip(stois, estois)]
-
-if __name__ == "__main__":
-    # Test STOI calculation
-    # fs = 10000
-    # torch.manual_seed(1)
-    # x1 = torch.randn(fs)
-    # x2 = torch.randn(fs)
-    # x2[1000:3000] *= 0.01
-    # y1 = x1 + 0.1 * torch.randn(fs)
-    # y2 = x2 + 0.3 * torch.randn(fs)
-
-    # torch_stoi = STOI()
-    
-    # d = torch_stoi(torch.stack([x1, x2]).cuda(), torch.stack([y1, y2]).cuda(), extended=True)
-    # from pystoi import stoi
-    # d_ref1 = stoi(x1.numpy(), y1.numpy(), fs, extended=True)
-    # d_ref2 = stoi(x2.numpy(), y2.numpy(), fs, extended=True)
-    # print(d[0].item() - d_ref1, d[1].item() - d_ref2)
-
-    fs = 10000
-    num_batches = 10
-    batch_size = 32
-    
-    torch.manual_seed(1)
-    x1 = torch.randn(num_batches*batch_size, 64*fs)
-    y1 = x1 + 0.25 * torch.randn_like(x1)
-
-    x1_numpy = x1.numpy()
-    y1_numpy = y1.numpy()
-
-    import time
-    from pystoi import stoi
-
-    start = time.time()
-    for i in range(num_batches*batch_size):
-        d = stoi(x1_numpy[i], y1_numpy[i], fs, extended=True)
-    end = time.time()
-    print(f"Time taken for pystoi: {end - start} seconds")
-
-    start = time.time()
-    torch_stoi = STOI()
-    for x1_batch, y1_batch in zip(x1.split(batch_size), y1.split(batch_size)):
-        d = torch_stoi(x1_batch.cuda(), y1_batch.cuda(), extended=True)
-    end = time.time()
-    print(f"Time taken for torch_stoi: {end - start} seconds")

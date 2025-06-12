@@ -72,9 +72,9 @@ class SDR(BaseMetric):
         self.zero_mean = False
         self.load_diag = None
 
-    def compute_metric(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+        assert clean_speech is not None
         # use double precision
-        clean_speech_dtype = clean_speech.dtype
         clean_speech = clean_speech.double()
         denoised_speech = denoised_speech.double()
 
@@ -104,9 +104,6 @@ class SDR(BaseMetric):
         # transform to decibels
         ratio = coh / (1 - coh)
         val = 10.0 * torch.log10(ratio)
-
-        if clean_speech_dtype == torch.float64:
-            return val
         return [{"SDR": sdr.item()} for sdr in val]
 
 
