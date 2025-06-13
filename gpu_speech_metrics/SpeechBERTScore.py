@@ -7,19 +7,11 @@ from gpu_speech_metrics.base import BaseMetric
 # In PyTorch 2+, a warning for checkpoint mismatch is raised.
 # But it should be a false alarm according to the following issue.
 # https://github.com/huggingface/transformers/issues/26796
-# I have added the following line to suppress the warning.
+# Suppress transformer warnings
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
-def bert_score(v_generated, v_reference):
-    """
-    Args:
-        v_generated (torch.Tensor): Generated feature tensor (T, D).
-        v_reference (torch.Tensor): Reference feature tensor (T, D).
-    Returns:
-        float: Precision.
-        float: Recall.
-        float: F1 score.
-    """
+
+def bert_score(v_generated: torch.Tensor, v_reference: torch.Tensor) -> tuple[float, float, float]:
     # Calculate cosine similarity
     sim_matrix = torch.matmul(v_generated, v_reference.T) / (torch.norm(v_generated, dim=1, keepdim=True) * torch.norm(v_reference, dim=1).unsqueeze(0))
 
@@ -32,7 +24,6 @@ def bert_score(v_generated, v_reference):
 
     return precision, recall, f1_score
 
-
 class SpeechBERTScore(BaseMetric):
     higher_is_better = True
     EXPECTED_SAMPLING_RATE = 16000
@@ -42,13 +33,20 @@ class SpeechBERTScore(BaseMetric):
         # some warnings may appear depending on the environment but should be fine given the discussion below
         # https://huggingface.co/utter-project/mHuBERT-147/discussions/7
         self.model = AutoModel.from_pretrained('utter-project/mHuBERT-147')
-        self.model.eval()
         self.model.to(self.device)
+        self.model.eval()
+        
+        try:
+            self.model = torch.compile(self.model, mode='default')
+        except Exception as e:
+            print(f"Warning: Model compilation failed: {e}")
 
     def process_feats(self, audio):
-        feats_hiddens = self.model(audio, output_hidden_states=True).hidden_states
-        feats = feats_hiddens[8]
-        return feats  
+        with torch.inference_mode():
+            with torch.autocast(device_type=self.device, dtype=torch.float16):
+                feats_hiddens = self.model(audio, output_hidden_states=True).hidden_states
+                feats = feats_hiddens[8]
+                return feats  
     
     def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
         """
@@ -68,7 +66,7 @@ class SpeechBERTScore(BaseMetric):
 
         results = []
         for r, g in zip(v_ref, v_gen):
-            precision, recall, f1_score = bert_score(g, r)
+            _, _, f1_score = bert_score(g, r)
             results.append({"SpeechBERTScore": f1_score})
 
         return results

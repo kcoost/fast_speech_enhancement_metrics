@@ -21,6 +21,8 @@ class STOI(BaseMetric):
         self.N = 30 # N. frames for intermediate intelligibility
         self.beta = -15. # Lower SDR bound
         self.dynamic_range = 40
+
+        self.window = torch.hann_window(self.win_length + 1, dtype=torch.float32, device=self.device)[1:]
     
     def get_octave_band_matrix(self) -> torch.Tensor:
         # Computes the 1/3 octave band matrix
@@ -46,14 +48,12 @@ class STOI(BaseMetric):
         return octave_band_matrix.to(torch.float32)
 
     def stft(self, speech: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
-        window = torch.hann_window(self.win_length+1, dtype=speech.dtype, device=speech.device)[1:]
-
         spectrogram = torch.stft(
             speech,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
             win_length=self.win_length,
-            window=window,
+            window=self.window,
             center=False,
             normalized=False,
             return_complex=True,
@@ -84,16 +84,12 @@ class STOI(BaseMetric):
             signal[i] += signal[i].scatter_add(0, idx.flatten(), frame.flatten())
         return signal, final_lengths
 
-    def remove_silent_frames(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Compute Mask
-        window = torch.hann_window(self.win_length + 1, dtype=clean_speech.dtype, device=clean_speech.device)[1:]
-        window = window.unsqueeze(0).unsqueeze(0)
-
+    def remove_silent_frames(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:        
         # Create frames
         clean_frames = clean_speech.unfold(1, self.win_length, self.hop_length)
-        clean_frames = clean_frames * window
+        clean_frames = clean_frames * self.window.unsqueeze(0).unsqueeze(0)
         denoised_frames = denoised_speech.unfold(1, self.win_length, self.hop_length)
-        denoised_frames = denoised_frames * window
+        denoised_frames = denoised_frames * self.window.unsqueeze(0).unsqueeze(0)
 
         # Compute energies in dB
         clean_energies = 20 * torch.log10(torch.norm(clean_frames, dim=2) + 1e-9)
@@ -134,46 +130,56 @@ class STOI(BaseMetric):
         clip_value = 10 ** (-self.beta / 20)
         denoised_segments_normalized = torch.minimum(denoised_segments_normalized, clean_segments * (1 + clip_value))
         return denoised_segments_normalized
-
-    @torch.no_grad()
-    def compute_stoi(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor, extended: bool = False):
-        clean_speech, denoised_speech, lengths_silent = self.remove_silent_frames(clean_speech, denoised_speech)
-
-        clean_segments = self.compute_segments(clean_speech, lengths_silent)
-        denoised_segments = self.compute_segments(denoised_speech, lengths_silent)
-
-        # Ensure at least 30 frames for intermediate intelligibility
-        if len(clean_segments) == 0:
-            warnings.warn('Not enough non-silent frames. Please check your sound files', RuntimeWarning)
-            return 0
-        
-        clean_segments = torch.stack(clean_segments, dim=1)
-        denoised_segments = torch.stack(denoised_segments, dim=1)
-
-        if not extended:
-            denoised_segments = self.equalize_clip(clean_segments, denoised_segments)
-        
-        clean_segments = self.normalize(clean_segments, dim=3)
-        denoised_segments = self.normalize(denoised_segments, dim=3)
-
-        if extended:
-            clean_segments = self.normalize(clean_segments, dim=2)
-            denoised_segments = self.normalize(denoised_segments, dim=2)
-        
+    
+    def compute_correlation(self, clean_segments: torch.Tensor, denoised_segments: torch.Tensor, mask: torch.Tensor, extended: bool) -> torch.Tensor:
         correlations_components = denoised_segments * clean_segments
         if extended:
             normalization = self.N
         else:
             normalization = self.num_octave_bands
         
-        num_segments = torch.maximum((lengths_silent - self.n_fft) // self.hop_length - self.N + 2, torch.zeros_like(lengths_silent, device=lengths_silent.device))
-        mask = (torch.arange(correlations_components.shape[1], device=correlations_components.device).unsqueeze(0) < num_segments.unsqueeze(1)).to(correlations_components.dtype)
-        
         correlations_components *= mask.unsqueeze(2).unsqueeze(3)
-        return torch.sum(correlations_components, dim=(1, 2, 3)) / (normalization*num_segments)
+        return torch.sum(correlations_components, dim=(1, 2, 3)) / normalization
+
+    @torch.no_grad()
+    def compute_stoi(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor):
+        batch_size = clean_speech.shape[0]
+        
+        clean_speech, denoised_speech, lengths_silent = self.remove_silent_frames(clean_speech, denoised_speech)
+
+        speech = torch.cat((clean_speech, denoised_speech), dim=0)
+        segments = self.compute_segments(speech, torch.cat((lengths_silent, lengths_silent), dim=0))
+
+        # Ensure at least 30 frames for intermediate intelligibility
+        if len(segments) == 0:
+            warnings.warn('Not enough non-silent frames. Please check your sound files', RuntimeWarning)
+            return 0
+        
+        segments = torch.stack(segments, dim=1)
+        clean_segments = segments[:batch_size]
+        denoised_segments = segments[batch_size:]
+
+        equalized_denoised_segments = self.equalize_clip(clean_segments, denoised_segments) # STOI
+        
+        # For STOI computation: normalize equalized segments
+        clean_segments_stoi = self.normalize(clean_segments.clone(), dim=3)
+        equalized_denoised_segments = self.normalize(equalized_denoised_segments, dim=3)
+
+        # For ESTOI computation: normalize original segments, then apply additional dim=2 normalization
+        clean_segments_estoi = self.normalize(clean_segments.clone(), dim=3)
+        denoised_segments_estoi = self.normalize(denoised_segments.clone(), dim=3)
+        clean_segments_estoi = self.normalize(clean_segments_estoi, dim=2)
+        denoised_segments_estoi = self.normalize(denoised_segments_estoi, dim=2)
+
+        num_segments = torch.maximum((lengths_silent - self.n_fft) // self.hop_length - self.N + 2, torch.zeros_like(lengths_silent, device=lengths_silent.device))
+        mask = (torch.arange(clean_segments.shape[1], device=clean_segments.device).unsqueeze(0) < num_segments.unsqueeze(1)).to(clean_segments.dtype)
+
+        correlations_stoi = self.compute_correlation(clean_segments_stoi, equalized_denoised_segments, mask=mask, extended=False)
+        correlations_estoi = self.compute_correlation(clean_segments_estoi, denoised_segments_estoi, mask=mask, extended=True)
+        
+        return correlations_stoi / num_segments, correlations_estoi / num_segments
     
     def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
         assert clean_speech is not None
-        stois = self.compute_stoi(clean_speech, denoised_speech, extended=False)
-        estois = self.compute_stoi(clean_speech, denoised_speech, extended=True)
+        stois, estois = self.compute_stoi(clean_speech, denoised_speech)
         return [{"STOI": stoi.item(), "ESTOI": estoi.item()} for stoi, estoi in zip(stois, estois)]

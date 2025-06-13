@@ -87,6 +87,8 @@ class PESQ(BaseMetric):
             dtype=torch.float32,
         )
 
+        self.taper_weights = torch.linspace(0, 15, 16, device=device)[1:] / 16.0
+
     def align_level(self, speech: torch.Tensor) -> torch.Tensor:
         # Align power to 10**7 for band 325 to 3.25kHz
         filtered_speech = lfilter(
@@ -95,7 +97,7 @@ class PESQ(BaseMetric):
 
         # calculate power with weird bugs in reference implementation
         power = (
-            (filtered_speech**2).sum(dim=1, keepdim=True)
+            (filtered_speech.square()).sum(dim=1, keepdim=True)
             / (filtered_speech.shape[1] + 5120)
             / 1.04684
         )
@@ -109,9 +111,8 @@ class PESQ(BaseMetric):
         # This pre-emphasize filter is also applied in the reference implementation.
         # The filter coefficients are taken from the reference.
 
-        emp = torch.linspace(0, 15, 16, device=speech.device)[1:] / 16.0
-        speech[:, :15] *= emp
-        speech[:, -15:] *= torch.flip(emp, dims=(0,))
+        speech[:, :15] *= self.taper_weights
+        speech[:, -15:] *= torch.flip(self.taper_weights, dims=(0,))
 
         speech = lfilter(speech, self.pre_filter[1], self.pre_filter[0], clamp=False)
 
@@ -126,13 +127,13 @@ class PESQ(BaseMetric):
         return clean_speech / max_value, noisy_speech / max_value
     
     def get_bark_bands(self, speech: torch.Tensor) -> torch.Tensor:
-        #speech = self.resampler(speech)
-
         speech = self.align_level(speech)
         speech = self.pre_emphasize(speech)
-
+        
         # do weird alignments with reference implementation
-        speech = torch.nn.functional.pad(speech, (0, speech.shape[1] % 256))
+        pad_amount = speech.shape[1] % 256
+        if pad_amount > 0:
+            speech = torch.nn.functional.pad(speech, (0, pad_amount))
 
         # calculate spectrogram for ref and degated speech
         speech = self.to_spec(speech).swapaxes(1, 2)
@@ -142,7 +143,6 @@ class PESQ(BaseMetric):
 
         # calculate power spectrum in bark scale and hearing threshold
         speech = self.filter_bank(speech)
-
         return speech
     
     def equalize_bark_bands(self, clean_bark_bands: torch.Tensor, noisy_bark_bands: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -171,27 +171,31 @@ class PESQ(BaseMetric):
 
     def get_overlapping_sums(self, disturbance: torch.Tensor) -> torch.Tensor:
         frames = disturbance.unfold(1, size=20, step=10)
-        psqm = (frames ** 6).mean(dim=2) ** (1 / 6)
+        psqm = frames.pow(6).mean(dim=2).pow(1/6)
         distance = psqm.square().mean(dim=1).sqrt()
         return distance
 
     def get_disturbances(self, clean_speech: torch.Tensor, noisy_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculate symmetric and asymmetric distances"""
+        batch_size = clean_speech.shape[0]
         clean_speech = torch.atleast_2d(clean_speech)
         noisy_speech = torch.atleast_2d(noisy_speech)
 
         clean_speech, noisy_speech = self.equalize_ranges(clean_speech, noisy_speech)
 
-        clean_bark_bands = self.get_bark_bands(clean_speech)
-        noisy_bark_bands = self.get_bark_bands(noisy_speech)
+        speech = torch.cat([clean_speech, noisy_speech], dim=0)
+        bark_bands = self.get_bark_bands(speech)
+        clean_bark_bands = bark_bands[:batch_size]
+        noisy_bark_bands = bark_bands[batch_size:]
 
         equalized_clean_bark_bands, equalized_noisy_bark_bands = self.equalize_bark_bands(clean_bark_bands, noisy_bark_bands)
 
-        clean_loudness = self.loudness.loudness(equalized_clean_bark_bands)
-        noisy_loudness = self.loudness.loudness(equalized_noisy_bark_bands)
+        equalized_bark_bands = torch.cat([equalized_clean_bark_bands, equalized_noisy_bark_bands], dim=0)
+        loudness = self.loudness.loudness(equalized_bark_bands)
+        clean_loudness = loudness[:batch_size]
+        noisy_loudness = loudness[batch_size:]
 
         # calculate disturbance
-        deadzone = 0.25 * torch.min(clean_loudness, noisy_loudness)
+        deadzone = 0.25 * torch.min(clean_loudness, noisy_loudness).squeeze(-1)
         disturbance = noisy_loudness - clean_loudness
         disturbance = disturbance.sign() * (disturbance.abs() - deadzone).clamp(min=0)
 
@@ -207,7 +211,7 @@ class PESQ(BaseMetric):
         symmetric_disturbance = symmetric_disturbance.clamp(min=1e-20)
 
         # asymmetrical disturbance
-        asymmetric_scaling = ((equalized_noisy_bark_bands + 50.0) / (equalized_clean_bark_bands + 50.0)) ** 1.2
+        asymmetric_scaling = ((equalized_noisy_bark_bands + 50.0) / (equalized_clean_bark_bands + 50.0)).pow(1.2)
         asymmetric_scaling[asymmetric_scaling < 3.0] = 0.0
         asymmetric_scaling = asymmetric_scaling.clamp(max=12.0)
 
@@ -215,23 +219,25 @@ class PESQ(BaseMetric):
         asymmetric_disturbance = asymmetric_disturbance.clamp(min=1e-20)
 
         # weighting
-        weight = ((self.loudness.audible_frame_power(equalized_clean_bark_bands, 1) + 1e5) / 1e7) ** 0.04
+        weight = ((self.loudness.audible_frame_power(equalized_clean_bark_bands, 1) + 1e5) / 1e7).pow(0.04)
         symmetric_disturbance = (symmetric_disturbance / weight.squeeze(-1)).clamp(max=45.0)
         asymmetric_disturbance = (asymmetric_disturbance / weight.squeeze(-1)).clamp(max=45.0)
 
         # calculate overlapping sums
         symmetric_distance = self.get_overlapping_sums(symmetric_disturbance)
         asymmetric_distance = self.get_overlapping_sums(asymmetric_disturbance)
+
         return symmetric_distance, asymmetric_distance
 
     def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
         assert clean_speech is not None
-        symmetric_distance, asymmetric_distance = self.get_disturbances(clean_speech, denoised_speech)
+        with torch.inference_mode():
+            symmetric_distance, asymmetric_distance = self.get_disturbances(clean_speech, denoised_speech)
 
-        # calculate MOS as combination of symmetric and asymmetric distance
-        mos = 4.5 - 0.1 * symmetric_distance - 0.0309 * asymmetric_distance
+            # calculate MOS as combination of symmetric and asymmetric distance
+            mos = 4.5 - 0.1 * symmetric_distance - 0.0309 * asymmetric_distance
 
-        # apply compression curve to have MOS in proper range
-        mos = 0.999 + 4 / (1 + torch.exp(-1.3669 * mos + 3.8224))
+            # apply compression curve to have MOS in proper range
+            mos = 0.999 + 4 / (1 + torch.exp(-1.3669 * mos + 3.8224))
 
-        return [{"PESQ": m.item()} for m in mos]
+            return [{"PESQ": m.item()} for m in mos]

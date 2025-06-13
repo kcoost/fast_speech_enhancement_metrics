@@ -12,14 +12,15 @@ class LSD(BaseMetric):
         self.hop = int(self.EXPECTED_SAMPLING_RATE * 0.016)
         self.p = 2
         self.eps = 1.0e-08
+        self.window = torch.hann_window(self.nfft, device=self.device)
 
     def torch_stft(self, signal: torch.Tensor) -> torch.Tensor:
         # Gives the same result as np.abs(librosa.stft(ref, hop_length=hop, n_fft=nfft))
-        window = torch.hann_window(self.nfft, device=self.device)
+        
         spectrogram = torch.stft(signal,
                         n_fft=self.nfft,
                         hop_length=self.hop,
-                        window=window,
+                        window=self.window,
                         center=True,
                         pad_mode="constant",
                         return_complex=True)
@@ -27,13 +28,16 @@ class LSD(BaseMetric):
     
     def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
         assert clean_speech is not None
+        batch_size = clean_speech.shape[0]
         scaling_factor = torch.sum(clean_speech * denoised_speech, dim=1, keepdim=True) / (torch.sum(denoised_speech**2, dim=1, keepdim=True) + self.eps)
         denoised_speech = denoised_speech * scaling_factor
 
-        clean_speech_spectrogram = self.torch_stft(clean_speech)
-        denoised_speech_spectrogram = self.torch_stft(denoised_speech)
+        speech = torch.cat([clean_speech, denoised_speech], dim=0)
+        speech_spectrogram = self.torch_stft(speech)
+        clean_speech_spectrogram = speech_spectrogram[:batch_size]
+        denoised_speech_spectrogram = speech_spectrogram[batch_size:]
 
-        lsds = torch.log(clean_speech_spectrogram**2 / ((denoised_speech_spectrogram + self.eps) ** 2) + self.eps) ** self.p
+        lsds = torch.log(clean_speech_spectrogram.square() / ((denoised_speech_spectrogram + self.eps).square()) + self.eps).pow(self.p)
         lsds = lsds.mean(dim=1).pow(1/self.p).mean(dim=1)
 
         return [{"LSD": lsd.item()} for lsd in lsds]

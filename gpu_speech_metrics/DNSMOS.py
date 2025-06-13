@@ -65,7 +65,7 @@ class DNSMOSNet(nn.Module):
         stft_real = self.conv_real_stft(audio_segments)
         stft_imag = self.conv_imag_stft(audio_segments)
 
-        power_spectrum = stft_real**2 + stft_imag**2
+        power_spectrum = stft_real.square() + stft_imag.square()
 
         power_spectrum = torch.maximum(torch.tensor(1e-12), power_spectrum)
         log_power_spectrum = torch.log10(power_spectrum)
@@ -89,24 +89,52 @@ class DNSMOS(BaseMetric):
         super().__init__(sample_rate, device)
         self.primary_model = DNSMOSNet()
         self.primary_model.to(device)
+        self.primary_model.eval()
+
+        try:
+            self.primary_model = torch.compile(self.primary_model, mode='default') # type: ignore[assignment]
+        except Exception as e:
+            print(f"Warning: Model compilation failed: {e}")
 
         self.constants = torch.tensor([0.0052439, -0.39604546, 0.04602535], device=self.device)
         self.b1 = torch.tensor([1.22083953, 1.60915514, 1.11546468], device=self.device)
         self.b2 = torch.tensor([-0.08397278, -0.13166888, -0.06766283], device=self.device)
 
+    # def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    #     hop_length = self.EXPECTED_SAMPLING_RATE
+    #     batch_size = denoised_speech.shape[0]
+
+    #     while denoised_speech.shape[1] < int(INPUT_LENGTH * self.EXPECTED_SAMPLING_RATE):
+    #         denoised_speech = torch.cat((denoised_speech, denoised_speech), dim=1)
+    #     if denoised_speech.dtype != torch.float32:
+    #         denoised_speech = denoised_speech.float()
+
+    #     audio_segments = denoised_speech.unfold(1, int(INPUT_LENGTH*hop_length), hop_length)
+    #     audio_segments = audio_segments.reshape(-1, int(INPUT_LENGTH*hop_length))
+    #     with torch.inference_mode():
+    #         with torch.autocast(device_type=self.device, dtype=torch.float16):
+    #             sig_bak_ovr_raw = self.primary_model(audio_segments)
+    #     sig_bak_ovr = self.constants + self.b1 * sig_bak_ovr_raw + self.b2 * sig_bak_ovr_raw**2
+    #     sig_bak_ovr = sig_bak_ovr.reshape(batch_size, -1, 3).mean(1)
+    #     sig, bak, ovr = sig_bak_ovr[:, 0], sig_bak_ovr[:, 1], sig_bak_ovr[:, 2]
+
+    #     return [{"SIG": s.item(), "BAK": b.item(), "OVRL": o.item()} for s, b, o in zip(sig, bak, ovr)]
+
     def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
-        len_samples = int(INPUT_LENGTH * self.EXPECTED_SAMPLING_RATE)
+        hop_length = self.EXPECTED_SAMPLING_RATE
+
         results = []
+        # batching doesn't result in any significant speedup
         for audio in denoised_speech:
-            while len(audio) < len_samples:
+            while len(audio) < int(INPUT_LENGTH * self.EXPECTED_SAMPLING_RATE):
                 audio = torch.cat((audio, audio))
 
-            hop_len_samples = self.EXPECTED_SAMPLING_RATE
-
-            audio_segments = audio.unfold(0, int(INPUT_LENGTH*hop_len_samples), hop_len_samples)
+            audio_segments = audio.unfold(0, int(INPUT_LENGTH*hop_length), hop_length)
             audio_segments = audio_segments.float()
             #audio_segments = audio_segments[:7]
-            sig_bak_ovr_raw = self.primary_model(audio_segments)
+            with torch.inference_mode():
+                with torch.autocast(device_type=self.device, dtype=torch.float16):
+                    sig_bak_ovr_raw = self.primary_model(audio_segments)
             sig_bak_ovr = self.constants + self.b1 * sig_bak_ovr_raw + self.b2 * sig_bak_ovr_raw**2
             sig, bak, ovr = sig_bak_ovr.mean(0)
             results.append({
