@@ -16,7 +16,6 @@ torchvision = "^0.22.1"
 transformers = "^4.52.4"
 pkginfo = "^1.12.1.2"
 onnx2torch = "^1.5.15"
-librosa = "^0.11.0"
 scipy-stubs = "^1.15.3.0"
 
 
@@ -27,6 +26,8 @@ pesq = "^0.0.4"
 torch-pesq = "^0.1.2"
 torchtyping ="^0.1.5"
 pystoi = "^0.4.1"
+torchmetrics = "^1.7.3"
+librosa = "^0.11.0"
 
 [build-system]
 requires = ["poetry-core"]

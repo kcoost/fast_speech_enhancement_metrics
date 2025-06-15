@@ -9,16 +9,22 @@ CACHE = False
 def load_noise(num_samples: int = 1, sample_duration: int = 1, sample_rate: int = 16000):
     total_duration = num_samples * sample_duration
     flap_noise = load_dataset("nccratliri/wing-flap-noise-audio-examples", streaming=not CACHE)
-    noises = torch.tensor([])
-    for sample in tqdm(flap_noise["train"], desc="Loading noise"):
+    noise_list = []
+    total_samples = 0
+    progress_bar = tqdm(flap_noise["train"], desc="Loading noise")
+    for sample in progress_bar:
         noise = resample(torch.tensor(sample["audio"]["array"]),
                         orig_freq=sample["audio"]["sampling_rate"],
                         new_freq=sample_rate)
-        noises = torch.cat([noises, noise])
-        if len(noises) >= total_duration * sample_rate:
+        noise_list.append(noise)
+        total_samples += len(noise)
+        if total_samples >= total_duration * sample_rate:
             break
+        progress_bar.set_description(f"Loading noise: {100*total_samples/(total_duration * sample_rate):.2f}%")
+    
+    noises = torch.cat(noise_list)
     if len(noises) < total_duration * sample_rate:
-        noises = torch.cat(((total_duration * sample_rate) //len(noises) + 1)*[noises])
+        noises = torch.cat(((total_duration * sample_rate) // len(noises) + 1)*[noises])
     noises = noises[:total_duration * sample_rate]
     noises = noises.view(num_samples, sample_duration * sample_rate)
     return noises
@@ -26,14 +32,20 @@ def load_noise(num_samples: int = 1, sample_duration: int = 1, sample_rate: int 
 def load_speech(num_samples: int = 1, sample_duration: int = 1, sample_rate: int = 16000):
     total_duration = num_samples * sample_duration
     peoples_speech = load_dataset("MLCommons/peoples_speech", "validation", streaming=not CACHE)
-    speeches = torch.tensor([])
-    for sample in tqdm(peoples_speech["validation"], desc="Loading speech"):
+    speech_list = []
+    total_samples = 0
+    progress_bar = tqdm(peoples_speech["validation"], desc="Loading speech")
+    for sample in progress_bar:
         speech = resample(torch.tensor(sample["audio"]["array"]),
                       orig_freq=sample["audio"]["sampling_rate"],
                       new_freq=sample_rate)
-        speeches = torch.cat([speeches, speech])
-        if len(speeches) >= total_duration * sample_rate:
+        speech_list.append(speech)
+        total_samples += len(speech)
+        if total_samples >= total_duration * sample_rate:
             break
+        progress_bar.set_description(f"Loading speech: {100*total_samples/(total_duration * sample_rate):.2f}%")
+    
+    speeches = torch.cat(speech_list)
     if len(speeches) < total_duration * sample_rate:
         speeches = torch.cat(((total_duration * sample_rate) // len(speeches) + 1)*[speeches])
     speeches = speeches[:total_duration * sample_rate]
