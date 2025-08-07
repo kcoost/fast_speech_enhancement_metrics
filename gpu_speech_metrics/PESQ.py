@@ -3,16 +3,17 @@ import numpy as np
 
 from scipy.signal import butter
 from torchaudio.functional import lfilter
-from torchaudio.transforms import Spectrogram, Resample
+from torchaudio.transforms import Spectrogram
 
-from gpu_speech_metrics.bark import BarkFilterBank
-from gpu_speech_metrics.loudness import Loudness
+from gpu_speech_metrics.utils.bark import BarkFilterBank
+from gpu_speech_metrics.utils.loudness import Loudness
 from gpu_speech_metrics.base import BaseMetric
+
 
 class PESQ(BaseMetric):
     higher_is_better = True
     EXPECTED_SAMPLING_RATE = 16000
-    
+
     """Perceptual Evaluation of Speech Quality
 
     Implementation of the PESQ score in the PyTorch framework, closely following the ITU P.862
@@ -51,8 +52,8 @@ class PESQ(BaseMetric):
         Pre-empasize filter, applied to reference and degraded signal
     """
 
-    def __init__(self, sample_rate: int = 16000, device: str = "cpu"):
-        super().__init__(sample_rate, device)
+    def __init__(self, sample_rate: int = 16000, use_gpu: bool = False):
+        super().__init__(sample_rate, use_gpu)
         nbarks = 49
         win_length = 512
         n_fft = 512
@@ -67,13 +68,13 @@ class PESQ(BaseMetric):
             power=2,
             normalized=False,
             center=False,
-        ).to(device)
+        ).to(self.device)
 
         # use a Bark filterbank to model perceived frequency resolution
-        self.filter_bank = BarkFilterBank(n_fft // 2, nbarks, device=device)
+        self.filter_bank = BarkFilterBank(n_fft // 2, nbarks, device=self.device)
 
         # set up loudness degation and calibration
-        self.loudness = Loudness(nbarks, device=device)
+        self.loudness = Loudness(nbarks, device=self.device)
 
         # design IIR bandpass filter for power degation between 325Hz to 3.25kHz
         out = np.asarray(butter(5, [325, 3250], fs=16000, btype="band"))
@@ -81,26 +82,19 @@ class PESQ(BaseMetric):
 
         # use IIR filter for pre-emphasize
         self.pre_filter = torch.tensor(
-            [[2.740826, -5.4816519, 2.740826],
-            [1.0, -1.9444777, 0.94597794]],
+            [[2.740826, -5.4816519, 2.740826], [1.0, -1.9444777, 0.94597794]],
             device=self.device,
             dtype=torch.float32,
         )
 
-        self.taper_weights = torch.linspace(0, 15, 16, device=device)[1:] / 16.0
+        self.taper_weights = torch.linspace(0, 15, 16, device=self.device)[1:] / 16.0
 
     def align_level(self, speech: torch.Tensor) -> torch.Tensor:
         # Align power to 10**7 for band 325 to 3.25kHz
-        filtered_speech = lfilter(
-            speech, self.power_filter[1], self.power_filter[0], clamp=False
-        )
+        filtered_speech = lfilter(speech, self.power_filter[1], self.power_filter[0], clamp=False)
 
         # calculate power with weird bugs in reference implementation
-        power = (
-            (filtered_speech.square()).sum(dim=1, keepdim=True)
-            / (filtered_speech.shape[1] + 5120)
-            / 1.04684
-        )
+        power = (filtered_speech.square()).sum(dim=1, keepdim=True) / (filtered_speech.shape[1] + 5120) / 1.04684
 
         # align power
         speech = speech * (10**7 / power).sqrt()
@@ -117,7 +111,7 @@ class PESQ(BaseMetric):
         speech = lfilter(speech, self.pre_filter[1], self.pre_filter[0], clamp=False)
 
         return speech
-    
+
     @staticmethod
     def equalize_ranges(clean_speech: torch.Tensor, noisy_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         max_value = torch.max(
@@ -125,11 +119,11 @@ class PESQ(BaseMetric):
             torch.amax(noisy_speech.abs(), dim=1, keepdim=True),
         )
         return clean_speech / max_value, noisy_speech / max_value
-    
+
     def get_bark_bands(self, speech: torch.Tensor) -> torch.Tensor:
         speech = self.align_level(speech)
         speech = self.pre_emphasize(speech)
-        
+
         # do weird alignments with reference implementation
         pad_amount = speech.shape[1] % 256
         if pad_amount > 0:
@@ -144,8 +138,10 @@ class PESQ(BaseMetric):
         # calculate power spectrum in bark scale and hearing threshold
         speech = self.filter_bank(speech)
         return speech
-    
-    def equalize_bark_bands(self, clean_bark_bands: torch.Tensor, noisy_bark_bands: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+
+    def equalize_bark_bands(
+        self, clean_bark_bands: torch.Tensor, noisy_bark_bands: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # degate silent frames
         frame_is_silent = self.loudness.audible_frame_power(clean_bark_bands, 1e2) < 1e7
 
@@ -162,7 +158,7 @@ class PESQ(BaseMetric):
             self.loudness.audible_frame_power(noisy_bark_bands, 1) + 5e3
         )
 
-        frame_power_ratio[:, 1:] = 0.8*frame_power_ratio[:, 1:] + 0.2*frame_power_ratio[:, :-1]
+        frame_power_ratio[:, 1:] = 0.8 * frame_power_ratio[:, 1:] + 0.2 * frame_power_ratio[:, :-1]
         frame_power_ratio = frame_power_ratio.clamp(min=3e-4, max=5.0)
 
         equalized_noisy_bark_bands = frame_power_ratio * noisy_bark_bands
@@ -171,11 +167,13 @@ class PESQ(BaseMetric):
 
     def get_overlapping_sums(self, disturbance: torch.Tensor) -> torch.Tensor:
         frames = disturbance.unfold(1, size=20, step=10)
-        psqm = frames.pow(6).mean(dim=2).pow(1/6)
+        psqm = frames.pow(6).mean(dim=2).pow(1 / 6)
         distance = psqm.square().mean(dim=1).sqrt()
         return distance
 
-    def get_disturbances(self, clean_speech: torch.Tensor, noisy_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def get_disturbances(
+        self, clean_speech: torch.Tensor, noisy_speech: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = clean_speech.shape[0]
         clean_speech = torch.atleast_2d(clean_speech)
         noisy_speech = torch.atleast_2d(noisy_speech)
@@ -187,7 +185,9 @@ class PESQ(BaseMetric):
         clean_bark_bands = bark_bands[:batch_size]
         noisy_bark_bands = bark_bands[batch_size:]
 
-        equalized_clean_bark_bands, equalized_noisy_bark_bands = self.equalize_bark_bands(clean_bark_bands, noisy_bark_bands)
+        equalized_clean_bark_bands, equalized_noisy_bark_bands = self.equalize_bark_bands(
+            clean_bark_bands, noisy_bark_bands
+        )
 
         equalized_bark_bands = torch.cat([equalized_clean_bark_bands, equalized_noisy_bark_bands], dim=0)
         loudness = self.loudness.loudness(equalized_bark_bands)
@@ -229,7 +229,9 @@ class PESQ(BaseMetric):
 
         return symmetric_distance, asymmetric_distance
 
-    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(
+        self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor
+    ) -> list[dict[str, float]]:
         assert clean_speech is not None
         with torch.inference_mode():
             symmetric_distance, asymmetric_distance = self.get_disturbances(clean_speech, denoised_speech)

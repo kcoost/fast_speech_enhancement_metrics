@@ -24,6 +24,7 @@ def poly1d(coefficients, use_numpy=False):
 
     return func
 
+
 class DNSMOS_local:
     # ported from
     # https://github.com/microsoft/DNS-Challenge/blob/master/DNSMOS/dnsmos_local.py
@@ -32,15 +33,19 @@ class DNSMOS_local:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "sig_bak_ovr.onnx"
-            subprocess.run([
-                "wget", "-c", "-O", model_path,
-                "https://github.com/microsoft/DNS-Challenge/raw/refs/heads/master/DNSMOS/DNSMOS/sig_bak_ovr.onnx"
-            ], check=True)
+            subprocess.run(
+                [
+                    "wget",
+                    "-c",
+                    "-O",
+                    model_path,
+                    "https://github.com/microsoft/DNS-Challenge/raw/refs/heads/master/DNSMOS/DNSMOS/sig_bak_ovr.onnx",
+                ],
+                check=True,
+            )
 
             self.primary_model = convert(model_path).eval()
-        self.spectrogram = torchaudio.transforms.Spectrogram(
-            n_fft=321, hop_length=160, pad_mode="constant"
-        )
+        self.spectrogram = torchaudio.transforms.Spectrogram(n_fft=321, hop_length=160, pad_mode="constant")
 
         self.to_db = torchaudio.transforms.AmplitudeToDB("power", top_db=80.0)
         if use_gpu:
@@ -70,7 +75,7 @@ class DNSMOS_local:
             aud = aud.to(device=device)
         else:
             aud = torch.as_tensor(aud, dtype=torch.float32, device=device)
-        
+
         assert input_fs == SAMPLING_RATE
         audio = aud
         len_samples = int(INPUT_LENGTH * SAMPLING_RATE)
@@ -87,19 +92,13 @@ class DNSMOS_local:
         predicted_mos_ovr_seg = []
 
         for idx in range(num_hops):
-            audio_seg = audio[
-                int(idx * hop_len_samples) : int((idx + INPUT_LENGTH) * hop_len_samples)
-            ]
+            audio_seg = audio[int(idx * hop_len_samples) : int((idx + INPUT_LENGTH) * hop_len_samples)]
             if len(audio_seg) < len_samples:
                 continue
 
             input_features = audio_seg.float()[None, :]
-            mos_sig_raw, mos_bak_raw, mos_ovr_raw = self.primary_model(
-                input_features
-            )[0]
-            mos_sig, mos_bak, mos_ovr = self.get_polyfit_val(
-                mos_sig_raw, mos_bak_raw, mos_ovr_raw, is_personalized_MOS
-            )
+            mos_sig_raw, mos_bak_raw, mos_ovr_raw = self.primary_model(input_features)[0]
+            mos_sig, mos_bak, mos_ovr = self.get_polyfit_val(mos_sig_raw, mos_bak_raw, mos_ovr_raw, is_personalized_MOS)
             predicted_mos_sig_seg_raw.append(mos_sig_raw)
             predicted_mos_bak_seg_raw.append(mos_bak_raw)
             predicted_mos_ovr_seg_raw.append(mos_ovr_raw)
@@ -117,13 +116,14 @@ class DNSMOS_local:
             "BAK": float(to_array(predicted_mos_bak_seg).mean()),
         }
 
+
 class DNSMOS_reference(BaseMetric):
     higher_is_better = True
     EXPECTED_SAMPLING_RATE = 16000
 
-    def __init__(self, sample_rate: int, device: str = "cpu"):
-        super().__init__(sample_rate=sample_rate, device=device)
-        self.dnsmos = DNSMOS_local(use_gpu=device == "cuda")
+    def __init__(self, sample_rate: int, use_gpu: bool = False):
+        super().__init__(sample_rate=sample_rate, use_gpu=use_gpu)
+        self.dnsmos = DNSMOS_local(use_gpu=use_gpu)
 
     def compute_metric(self, clean_speech: torch.Tensor, noisy_speech: torch.Tensor) -> list[dict[str, float]]:
         dnsmos_results = []

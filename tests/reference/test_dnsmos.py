@@ -23,6 +23,7 @@ def poly1d(coefficients, use_numpy=False):
 
     return func
 
+
 class DNSMOS_local:
     # ported from
     # https://github.com/microsoft/DNS-Challenge/blob/master/DNSMOS/dnsmos_local.py
@@ -31,9 +32,7 @@ class DNSMOS_local:
 
         if primary_model_path is not None:
             self.primary_model = convert(primary_model_path).eval()
-        self.spectrogram = torchaudio.transforms.Spectrogram(
-            n_fft=321, hop_length=160, pad_mode="constant"
-        )
+        self.spectrogram = torchaudio.transforms.Spectrogram(n_fft=321, hop_length=160, pad_mode="constant")
 
         self.to_db = torchaudio.transforms.AmplitudeToDB("power", top_db=80.0)
         if use_gpu:
@@ -65,7 +64,7 @@ class DNSMOS_local:
             aud = aud.to(device=device)
         else:
             aud = torch.as_tensor(aud, dtype=torch.float32, device=device)
-        
+
         assert input_fs == SAMPLING_RATE
         audio = aud
         len_samples = int(INPUT_LENGTH * SAMPLING_RATE)
@@ -82,19 +81,13 @@ class DNSMOS_local:
         predicted_mos_ovr_seg = []
 
         for idx in range(num_hops):
-            audio_seg = audio[
-                int(idx * hop_len_samples) : int((idx + INPUT_LENGTH) * hop_len_samples)
-            ]
+            audio_seg = audio[int(idx * hop_len_samples) : int((idx + INPUT_LENGTH) * hop_len_samples)]
             if len(audio_seg) < len_samples:
                 continue
 
             input_features = audio_seg.float()[None, :]
-            mos_sig_raw, mos_bak_raw, mos_ovr_raw = self.primary_model(
-                input_features
-            )[0]
-            mos_sig, mos_bak, mos_ovr = self.get_polyfit_val(
-                mos_sig_raw, mos_bak_raw, mos_ovr_raw, is_personalized_MOS
-            )
+            mos_sig_raw, mos_bak_raw, mos_ovr_raw = self.primary_model(input_features)[0]
+            mos_sig, mos_bak, mos_ovr = self.get_polyfit_val(mos_sig_raw, mos_bak_raw, mos_ovr_raw, is_personalized_MOS)
             predicted_mos_sig_seg_raw.append(mos_sig_raw)
             predicted_mos_bak_seg_raw.append(mos_bak_raw)
             predicted_mos_ovr_seg_raw.append(mos_ovr_raw)
@@ -112,14 +105,21 @@ class DNSMOS_local:
             "BAK": to_array(predicted_mos_bak_seg).mean(),
         }
 
+
 def test_dnsmos(speech_data, tmp_path):
     noisy_speeches = speech_data["noisy_speech"]
 
     model_path = tmp_path / "sig_bak_ovr.onnx"
-    subprocess.run([
-            "wget", "-c", "-O", model_path,
-            "https://github.com/microsoft/DNS-Challenge/raw/refs/heads/master/DNSMOS/DNSMOS/sig_bak_ovr.onnx"
-        ], check=True)
+    subprocess.run(
+        [
+            "wget",
+            "-c",
+            "-O",
+            model_path,
+            "https://github.com/microsoft/DNS-Challenge/raw/refs/heads/master/DNSMOS/DNSMOS/sig_bak_ovr.onnx",
+        ],
+        check=True,
+    )
     dnsmos_reference = DNSMOS_local(primary_model_path=model_path, use_gpu=False)
     dnsmos = DNSMOS()
 
@@ -130,7 +130,7 @@ def test_dnsmos(speech_data, tmp_path):
             reference_results.append(reference_result)
     results = dnsmos(None, noisy_speeches)
 
-    for reference_result, result in zip(reference_results, results):
+    for reference_result, result in zip(reference_results, results, strict=False):
         assert reference_result["OVRL"] == pytest.approx(result["OVRL"], 1e-6)
         assert reference_result["SIG"] == pytest.approx(result["SIG"], 1e-6)
         assert reference_result["BAK"] == pytest.approx(result["BAK"], 1e-6)

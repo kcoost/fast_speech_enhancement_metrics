@@ -6,6 +6,7 @@ from gpu_speech_metrics.base import BaseMetric
 INPUT_LENGTH = 9.01
 CHECKPOINT_PATH = Path(__file__).parents[1] / "checkpoints" / "SIG_BAK_OVR.pt"
 
+
 class DNSMOSNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -55,7 +56,7 @@ class DNSMOSNet(nn.Module):
         )
         checkpoint = torch.load(CHECKPOINT_PATH, weights_only=True)
         self.load_state_dict(checkpoint)
-    
+
     def forward(self, audio: torch.Tensor) -> torch.Tensor:
         batch_size = audio.shape[0]
 
@@ -73,7 +74,7 @@ class DNSMOSNet(nn.Module):
         log_power_spectrum = log_power_spectrum.unsqueeze(1)
 
         hidden = self.conv_layers(log_power_spectrum)
-        
+
         hidden = hidden.permute(0, 2, 3, 1)
         hidden = hidden.reshape(batch_size, -1, 64)
         hidden = torch.max(hidden, dim=1).values
@@ -81,18 +82,19 @@ class DNSMOSNet(nn.Module):
         output = self.output_layers(hidden)
         return output
 
+
 class DNSMOS(BaseMetric):
     higher_is_better = True
     EXPECTED_SAMPLING_RATE = 16000
 
-    def __init__(self, sample_rate: int = 16000, device: str = "cpu"):
-        super().__init__(sample_rate, device)
+    def __init__(self, sample_rate: int = 16000, use_gpu: bool = False):
+        super().__init__(sample_rate, use_gpu)
         self.primary_model = DNSMOSNet()
-        self.primary_model.to(device)
+        self.primary_model.to(self.device)
         self.primary_model.eval()
 
         try:
-            self.primary_model = torch.compile(self.primary_model, mode='default') # type: ignore[assignment]
+            self.primary_model = torch.compile(self.primary_model, mode="default")  # type: ignore[assignment]
         except Exception as e:
             print(f"Warning: Model compilation failed: {e}")
 
@@ -100,27 +102,9 @@ class DNSMOS(BaseMetric):
         self.b1 = torch.tensor([1.22083953, 1.60915514, 1.11546468], device=self.device)
         self.b2 = torch.tensor([-0.08397278, -0.13166888, -0.06766283], device=self.device)
 
-    # def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
-    #     hop_length = self.EXPECTED_SAMPLING_RATE
-    #     batch_size = denoised_speech.shape[0]
-
-    #     while denoised_speech.shape[1] < int(INPUT_LENGTH * self.EXPECTED_SAMPLING_RATE):
-    #         denoised_speech = torch.cat((denoised_speech, denoised_speech), dim=1)
-    #     if denoised_speech.dtype != torch.float32:
-    #         denoised_speech = denoised_speech.float()
-
-    #     audio_segments = denoised_speech.unfold(1, int(INPUT_LENGTH*hop_length), hop_length)
-    #     audio_segments = audio_segments.reshape(-1, int(INPUT_LENGTH*hop_length))
-    #     with torch.inference_mode():
-    #         with torch.autocast(device_type=self.device, dtype=torch.float16):
-    #             sig_bak_ovr_raw = self.primary_model(audio_segments)
-    #     sig_bak_ovr = self.constants + self.b1 * sig_bak_ovr_raw + self.b2 * sig_bak_ovr_raw**2
-    #     sig_bak_ovr = sig_bak_ovr.reshape(batch_size, -1, 3).mean(1)
-    #     sig, bak, ovr = sig_bak_ovr[:, 0], sig_bak_ovr[:, 1], sig_bak_ovr[:, 2]
-
-    #     return [{"SIG": s.item(), "BAK": b.item(), "OVRL": o.item()} for s, b, o in zip(sig, bak, ovr)]
-
-    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+    def compute_metric(
+        self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor
+    ) -> list[dict[str, float]]:
         hop_length = self.EXPECTED_SAMPLING_RATE
 
         results = []
@@ -129,19 +113,21 @@ class DNSMOS(BaseMetric):
             while len(audio) < int(INPUT_LENGTH * self.EXPECTED_SAMPLING_RATE):
                 audio = torch.cat((audio, audio))
 
-            audio_segments = audio.unfold(0, int(INPUT_LENGTH*hop_length), hop_length)
+            audio_segments = audio.unfold(0, int(INPUT_LENGTH * hop_length), hop_length)
             audio_segments = audio_segments.float()
-            #audio_segments = audio_segments[:7]
+            # audio_segments = audio_segments[:7]
             with torch.inference_mode():
                 with torch.autocast(device_type=self.device, dtype=torch.float16):
                     sig_bak_ovr_raw = self.primary_model(audio_segments)
             sig_bak_ovr = self.constants + self.b1 * sig_bak_ovr_raw + self.b2 * sig_bak_ovr_raw**2
             sig, bak, ovr = sig_bak_ovr.mean(0)
-            results.append({
-                "SIG": sig.item(),
-                "BAK": bak.item(),
-                "OVRL": ovr.item(),
-            })
+            results.append(
+                {
+                    "SIG": sig.item(),
+                    "BAK": bak.item(),
+                    "OVRL": ovr.item(),
+                }
+            )
 
             # original has bug:
             # [int(idx * hop_len_samples) - int((idx + INPUT_LENGTH) * hop_len_samples) for idx in range(11)] returns

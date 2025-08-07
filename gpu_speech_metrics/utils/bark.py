@@ -3,7 +3,7 @@ import torch
 from scipy import interpolate
 import numpy as np
 
-#from torchtyping import TensorType
+# from torchtyping import TensorType
 
 # fmt: off
 nr_of_hz_bands_per_bark_band_16k = [
@@ -76,7 +76,7 @@ pow_dens_correction_factor_16k = [
 Sp_16k = 6.910853e-006
 
 
-def interp(values: list, nelms_new: int) -> torch.Tensor: #TensorType:
+def interp(values: list, nelms_new: int) -> torch.Tensor:  # TensorType:
     """Apply linear interpolation to the list of values
 
     Parameters
@@ -153,8 +153,9 @@ class BarkFilterBank(torch.nn.Module):
             for i in range(nbarks):
                 stride = self.width_hz[i] / bin_width
                 centre = self.centre[i] / bin_width
-                start, end = max(prev, int(math.floor(centre - stride / 2))), min(
-                    nfreqs, int(math.ceil(centre + stride / 2))
+                start, end = (
+                    max(prev, int(math.floor(centre - stride / 2))),
+                    min(nfreqs, int(math.ceil(centre + stride / 2))),
                 )
                 fbank[i, start:end] = 1.0
                 prev = end
@@ -165,9 +166,7 @@ class BarkFilterBank(torch.nn.Module):
     # def weighted_norm(
     #     self, tensor: TensorType["batch", "frame", "band"], p: float = 2
     # ) -> TensorType["batch", "frame"]:
-    def weighted_norm(
-        self, tensor: torch.Tensor, p: float = 2
-    ) -> torch.Tensor: #TensorType["batch", "frame"]:
+    def weighted_norm(self, tensor: torch.Tensor, p: float = 2) -> torch.Tensor:  # TensorType["batch", "frame"]:
         """Calculates the p-norm taking band width into consideration
 
         Parameters
@@ -182,16 +181,12 @@ class BarkFilterBank(torch.nn.Module):
         TensorType["batch", "frame"]
             scaled norm value
         """
-        return self.total_width * (
-            self.width_bark * tensor / self.total_width ** (1 / p)
-        )[:, :, 1:].norm(p, dim=2)
+        return self.total_width * (self.width_bark * tensor / self.total_width ** (1 / p))[:, :, 1:].norm(p, dim=2)
 
     # def forward(
     #     self, tensor: TensorType["batch", "frame", "band"]
     # ) -> TensorType["batch", "frame", "bark"]:
-    def forward(
-        self, tensor: torch.Tensor
-    ) -> torch.Tensor: #TensorType["batch", "frame", "bark"]:
+    def forward(self, tensor: torch.Tensor) -> torch.Tensor:  # TensorType["batch", "frame", "bark"]:
         """Converts a Hz-scaled spectrogram to a Bark-scaled spectrogram
 
         Parameters

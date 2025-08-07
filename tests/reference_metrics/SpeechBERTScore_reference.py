@@ -1,4 +1,5 @@
 # From https://github.com/kohei0209/DiscreteSpeechMetrics/blob/mhubert_wo_pypesq/discrete_speech_metrics/speechbertscore.py
+# and https://github.com/urgent-challenge/urgent2025_challenge/blob/main/evaluation_metrics/calculate_speechbert_score.py#L17
 
 # Copyright 2024 Takaaki Saeki
 # MIT LICENSE (https://opensource.org/license/mit/)
@@ -16,6 +17,7 @@ from gpu_speech_metrics.base import BaseMetric
 # I have added the following line to suppress the warning.
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
+
 def bert_score(v_generated, v_reference):
     """
     Args:
@@ -27,7 +29,9 @@ def bert_score(v_generated, v_reference):
         float: F1 score.
     """
     # Calculate cosine similarity
-    sim_matrix = torch.matmul(v_generated, v_reference.T) / (torch.norm(v_generated, dim=1, keepdim=True) * torch.norm(v_reference, dim=1).unsqueeze(0))
+    sim_matrix = torch.matmul(v_generated, v_reference.T) / (
+        torch.norm(v_generated, dim=1, keepdim=True) * torch.norm(v_reference, dim=1).unsqueeze(0)
+    )
 
     # Calculate precision and recall
     precision = torch.max(sim_matrix, dim=1)[0].mean().item()
@@ -40,12 +44,12 @@ def bert_score(v_generated, v_reference):
 
 
 class SpeechBERTScore:
-
     def __init__(self, sr=16000, model_type="hubert-base", layer=None, use_gpu=True):
         """
         Args:
             sr (int): Sampling rate.
-            model_type (str): Model type. Select from "hubert-base", "hubert-large", "wav2vec2-base", "wav2vec2-large", "wavlm-base", "wavlm-base-plus", "wavlm-large".
+            model_type (str): Model type. Select from "hubert-base", "hubert-large", "wav2vec2-base", "wav2vec2-large",
+                              "wavlm-base", "wavlm-base-plus", "wavlm-large".
             layer (int): Layer number to extract features. If None, the last layer is used.
             use_gpu (bool): Whether to use GPU.
         """
@@ -66,7 +70,7 @@ class SpeechBERTScore:
         elif model_type == "mhubert-147":
             # some warnings may appear depending on the environment but should be fine given the discussion below
             # https://huggingface.co/utter-project/mHuBERT-147/discussions/7
-            self.model = AutoModel.from_pretrained('utter-project/mHuBERT-147')
+            self.model = AutoModel.from_pretrained("utter-project/mHuBERT-147")
         else:
             raise ValueError(f"Not found the setting for {model_type}.")
         self.model.eval()
@@ -84,13 +88,13 @@ class SpeechBERTScore:
         Args:
             audio (torch.Tensor): Audio waveform tensor (1, T).
         """
-        if self.layer == None:
+        if self.layer is None:
             feats = self.model(audio).last_hidden_state
         else:
             feats_hiddens = self.model(audio, output_hidden_states=True).hidden_states
             feats = feats_hiddens[self.layer]
         return feats
-    
+
     def score(self, gt_wav, gen_wav):
         """
         Args:
@@ -107,23 +111,25 @@ class SpeechBERTScore:
         if self.sr != 16000:
             gt_wav = self.resampler(gt_wav)
             gen_wav = self.resampler(gen_wav)
-        
+
         v_ref = self.process_feats(gt_wav)
         v_gen = self.process_feats(gen_wav)
         precision, recall, f1_score = bert_score(v_gen.squeeze(0), v_ref.squeeze(0))
 
         return precision, recall, f1_score
 
+
 class SpeechBERTScore_reference(BaseMetric):
     higher_is_better = True
     EXPECTED_SAMPLING_RATE = 16000
-    def __init__(self, sample_rate: int, device: str = "cpu"):
-        super().__init__(sample_rate=sample_rate, device=device)
-        self.speechbertscore = SpeechBERTScore(sr=sample_rate, use_gpu=device == "cuda")
+
+    def __init__(self, sample_rate: int, use_gpu: bool = False):
+        super().__init__(sample_rate=sample_rate, use_gpu=use_gpu)
+        self.speechbertscore = SpeechBERTScore(sr=sample_rate, model_type="mhubert-147", layer=8, use_gpu=use_gpu)
 
     def compute_metric(self, clean_speech: torch.Tensor, noisy_speech: torch.Tensor) -> list[dict[str, float]]:
         results = []
-        for cs, ns in zip(clean_speech, noisy_speech):
+        for cs, ns in zip(clean_speech, noisy_speech, strict=False):
             precision, recall, f1_score = self.speechbertscore.score(cs.cpu().numpy(), ns.cpu().numpy())
             results.append({"SpeechBERTScore": float(f1_score)})
         return results

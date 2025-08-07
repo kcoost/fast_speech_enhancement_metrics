@@ -3,6 +3,7 @@ import librosa
 import numpy as np
 from gpu_speech_metrics import LSD
 
+
 def lsd_metric(ref, inf, fs, nfft=0.032, hop=0.016, p=2, eps=1.0e-08):
     """Calculate Log-Spectral Distance (LSD).
 
@@ -29,6 +30,7 @@ def lsd_metric(ref, inf, fs, nfft=0.032, hop=0.016, p=2, eps=1.0e-08):
     lsd = np.mean(np.mean(lsd, axis=1) ** (1 / p), axis=0)
     return lsd
 
+
 def test_lsd(speech_data):
     clean_speeches = speech_data["speech"]
     noisy_speeches = speech_data["noisy_speech"]
@@ -36,11 +38,11 @@ def test_lsd(speech_data):
     lsd = LSD(16000)
 
     reference_results = []
-    for clean_speech, noisy_speech in zip(clean_speeches, noisy_speeches):
+    for clean_speech, noisy_speech in zip(clean_speeches, noisy_speeches, strict=False):
         reference_result = lsd_metric(clean_speech.numpy(), noisy_speech.numpy(), 16000)
         reference_results.append(reference_result)
-    
+
     results = lsd(clean_speeches, noisy_speeches)
 
-    for reference_result, result in zip(reference_results, results):
+    for reference_result, result in zip(reference_results, results, strict=False):
         assert reference_result == pytest.approx(result["LSD"], 1e-5)

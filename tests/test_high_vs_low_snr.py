@@ -4,6 +4,7 @@ from gpu_speech_metrics import LSD, STOI, PESQ, SDR, DNSMOS, SpeechBERTScore
 
 METRICS = [LSD, STOI, PESQ, SDR, DNSMOS, SpeechBERTScore]
 
+
 @pytest.mark.parametrize("metric_class", METRICS)
 def test_differentiation(high_snr_speech_data, low_snr_speech_data, metric_class):
     high_snr_speech = high_snr_speech_data["speech"]
@@ -16,7 +17,7 @@ def test_differentiation(high_snr_speech_data, low_snr_speech_data, metric_class
     high_snr_results = metric(high_snr_speech, high_snr_noisy_speech)
     low_snr_results = metric(low_snr_speech, low_snr_noisy_speech)
 
-    for high_snr_result, low_snr_result in zip(high_snr_results, low_snr_results):
+    for high_snr_result, low_snr_result in zip(high_snr_results, low_snr_results, strict=False):
         if metric.higher_is_better:
             for key in high_snr_result:
                 assert high_snr_result[key] > low_snr_result[key]

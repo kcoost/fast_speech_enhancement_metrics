@@ -28,6 +28,33 @@ torchtyping ="^0.1.5"
 pystoi = "^0.4.1"
 torchmetrics = "^1.7.3"
 librosa = "^0.11.0"
+pre-commit = "^4.2.0"
+ruff = "^0.12.3"
+
+[tool.ruff]
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    "__pypackages__",
+    ".pytest_cache",
+    ".vscode"
+]
+line-length = 120
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.lint]
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+select = ["E", "F", "B"]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [build-system]
 requires = ["poetry-core"]

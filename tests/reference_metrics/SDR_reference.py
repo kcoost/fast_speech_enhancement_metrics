@@ -3,6 +3,7 @@ from gpu_speech_metrics.base import BaseMetric
 
 import torchmetrics
 
+
 class SDR_reference(BaseMetric):
     higher_is_better = True
     EXPECTED_SAMPLING_RATE = 16000

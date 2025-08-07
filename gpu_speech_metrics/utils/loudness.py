@@ -1,7 +1,7 @@
 import torch
 
-#from torchtyping import TensorType
-#from typeguard import typechecked
+# from torchtyping import TensorType
+# from typeguard import typechecked
 
 from .bark import centre_of_band_bark_16k, interp
 
@@ -61,9 +61,7 @@ class Loudness:
 
     def loudness(self, power_density: torch.Tensor) -> torch.Tensor:
         # Calculate audible energy per band
-        loudness = (2.0 * self.threshs) ** self.exp * (
-            (0.5 + 0.5 * power_density / self.threshs) ** self.exp - 1
-        )
+        loudness = (2.0 * self.threshs) ** self.exp * ((0.5 + 0.5 * power_density / self.threshs) ** self.exp - 1)
         loudness[power_density <= self.threshs] = 0.0
 
         return loudness * Sl_16k

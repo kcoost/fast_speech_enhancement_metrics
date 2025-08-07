@@ -9,8 +9,8 @@ class STOI_reference(BaseMetric):
 
     def compute_metric(self, clean_speech: torch.Tensor, noisy_speech: torch.Tensor) -> list[dict[str, float]]:
         stois = []
-        for speech, noisy_speech in zip(clean_speech, noisy_speech):
-            stoi = stoi_reference(speech.numpy(), noisy_speech.numpy(), 10000, extended=False)
-            estoi = stoi_reference(speech.numpy(), noisy_speech.numpy(), 10000, extended=True)
+        for s, ns in zip(clean_speech, noisy_speech, strict=False):
+            stoi = stoi_reference(s.numpy(), ns.numpy(), 10000, extended=False)
+            estoi = stoi_reference(s.numpy(), ns.numpy(), 10000, extended=True)
             stois.append({"STOI": stoi, "ESTOI": estoi})
         return stois

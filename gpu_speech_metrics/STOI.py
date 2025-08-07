@@ -1,41 +1,40 @@
-import numpy as np
 import warnings
 
-import numpy as np
 import torch
 from gpu_speech_metrics.base import BaseMetric
+
 
 class STOI(BaseMetric):
     higher_is_better = True
     EXPECTED_SAMPLING_RATE = 10000
 
-    def __init__(self, sample_rate: int = 10000, device: str = "cpu"):
-        super().__init__(sample_rate, device)
+    def __init__(self, sample_rate: int = 10000, use_gpu: bool = False):
+        super().__init__(sample_rate, use_gpu)
         self.sampling_frequency = self.EXPECTED_SAMPLING_RATE
         self.win_length = 256
         self.hop_length = self.win_length // 2
         self.n_fft = 512
         self.num_octave_bands = 15
-        self.min_frequency = 150 # Center frequency of 1st octave band (Hz)
+        self.min_frequency = 150  # Center frequency of 1st octave band (Hz)
         self.octave_band_matrix = self.get_octave_band_matrix()
-        self.N = 30 # N. frames for intermediate intelligibility
-        self.beta = -15. # Lower SDR bound
+        self.N = 30  # N. frames for intermediate intelligibility
+        self.beta = -15.0  # Lower SDR bound
         self.dynamic_range = 40
 
         self.window = torch.hann_window(self.win_length + 1, dtype=torch.float32, device=self.device)[1:]
-    
+
     def get_octave_band_matrix(self) -> torch.Tensor:
         # Computes the 1/3 octave band matrix
-        num_frequencies = self.n_fft//2 + 1
-        
-        frequencies = torch.linspace(0, self.sampling_frequency//2, num_frequencies, dtype=torch.float64)
-        
+        num_frequencies = self.n_fft // 2 + 1
+
+        frequencies = torch.linspace(0, self.sampling_frequency // 2, num_frequencies, dtype=torch.float64)
+
         # Calculate center frequencies and frequency bounds
-        band_idx = torch.arange(self.num_octave_bands, dtype=torch.float64) # important for precision
+        band_idx = torch.arange(self.num_octave_bands, dtype=torch.float64)  # important for precision
         frequencies_low = self.min_frequency * torch.pow(2.0, (2 * band_idx - 1) / 6)
         frequencies_high = self.min_frequency * torch.pow(2.0, (2 * band_idx + 1) / 6)
-        
-        octave_band_matrix = torch.zeros((self.num_octave_bands, num_frequencies), dtype=torch.float64)        
+
+        octave_band_matrix = torch.zeros((self.num_octave_bands, num_frequencies), dtype=torch.float64)
         for i in range(self.num_octave_bands):
             # Match 1/3 oct band freq with fft frequency bin
             idx_bin_low = torch.argmin((frequencies - frequencies_low[i]).abs())
@@ -43,7 +42,7 @@ class STOI(BaseMetric):
 
             frequencies_low[i] = frequencies[idx_bin_low]
             frequencies_high[i] = frequencies[idx_bin_high]
-            
+
             octave_band_matrix[i, idx_bin_low:idx_bin_high] = 1
         return octave_band_matrix.to(torch.float32)
 
@@ -57,7 +56,7 @@ class STOI(BaseMetric):
             center=False,
             normalized=False,
             return_complex=True,
-            onesided=True
+            onesided=True,
         )
         spectrogram = spectrogram.abs().square()
         # for i in range(len(lengths)):
@@ -73,18 +72,22 @@ class STOI(BaseMetric):
         final_lengths = (lengths + 1) * self.hop_length
         max_length = int(torch.max(final_lengths).item())
         batch_size = len(final_lengths)
-        
+
         signal = torch.zeros((batch_size, max_length), dtype=frames.dtype, device=frames.device)
 
         for i, frame in enumerate(frames.split(lengths.tolist())):
             # Vectorized version of
             # for i in range(num_frames):
             #     signal[i * hop_length:i * hop_length + frame_length] += x_frames[i]
-            idx = torch.arange(self.win_length, device=frames.device).unsqueeze(0) + self.hop_length * torch.arange(int(lengths[i].item()), device=frames.device).unsqueeze(1)
+            idx = torch.arange(self.win_length, device=frames.device).unsqueeze(0) + self.hop_length * torch.arange(
+                int(lengths[i].item()), device=frames.device
+            ).unsqueeze(1)
             signal[i] += signal[i].scatter_add(0, idx.flatten(), frame.flatten())
         return signal, final_lengths
 
-    def remove_silent_frames(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:        
+    def remove_silent_frames(
+        self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # Create frames
         clean_frames = clean_speech.unfold(1, self.win_length, self.hop_length)
         clean_frames = clean_frames * self.window.unsqueeze(0).unsqueeze(0)
@@ -106,45 +109,51 @@ class STOI(BaseMetric):
         clean_silent, lengths_silent = self.overlap_and_add(clean_frames, num_frames)
         denoised_silent, _ = self.overlap_and_add(denoised_frames, num_frames)
         return clean_silent, denoised_silent, lengths_silent
-    
+
     @staticmethod
     def normalize(x: torch.Tensor, dim: int = 0) -> torch.Tensor:
         x -= x.mean(dim=dim, keepdim=True)
-        x += 1e-12*torch.randn_like(x)
+        x += 1e-12 * torch.randn_like(x)
         norm = torch.norm(x, p=2, dim=dim, keepdim=True)
         x /= norm
         return x
-    
+
     def compute_segments(self, speech: torch.Tensor, lengths: torch.Tensor):
         spectrogram = self.stft(speech, lengths)
-        tob = torch.sqrt(torch.bmm(self.octave_band_matrix.to(speech.device).unsqueeze(0).repeat(len(speech), 1, 1), spectrogram))
-        segments = [tob[:, :, m:m + self.N] for m in range(max(tob.shape[2] - self.N + 1, 0))]
+        tob = torch.sqrt(
+            torch.bmm(self.octave_band_matrix.to(speech.device).unsqueeze(0).repeat(len(speech), 1, 1), spectrogram)
+        )
+        segments = [tob[:, :, m : m + self.N] for m in range(max(tob.shape[2] - self.N + 1, 0))]
         return segments
-    
+
     def equalize_clip(self, clean_segments: torch.Tensor, denoised_segments: torch.Tensor) -> torch.Tensor:
         # Find normalization constants and normalize
-        normalization_consts = torch.norm(clean_segments, dim=3, keepdim=True) /(torch.norm(denoised_segments, dim=3, keepdim=True) + 1e-9)
+        normalization_consts = torch.norm(clean_segments, dim=3, keepdim=True) / (
+            torch.norm(denoised_segments, dim=3, keepdim=True) + 1e-9
+        )
         denoised_segments_normalized = denoised_segments * normalization_consts
 
         # Clip as described in [1]
         clip_value = 10 ** (-self.beta / 20)
         denoised_segments_normalized = torch.minimum(denoised_segments_normalized, clean_segments * (1 + clip_value))
         return denoised_segments_normalized
-    
-    def compute_correlation(self, clean_segments: torch.Tensor, denoised_segments: torch.Tensor, mask: torch.Tensor, extended: bool) -> torch.Tensor:
+
+    def compute_correlation(
+        self, clean_segments: torch.Tensor, denoised_segments: torch.Tensor, mask: torch.Tensor, extended: bool
+    ) -> torch.Tensor:
         correlations_components = denoised_segments * clean_segments
         if extended:
             normalization = self.N
         else:
             normalization = self.num_octave_bands
-        
+
         correlations_components *= mask.unsqueeze(2).unsqueeze(3)
         return torch.sum(correlations_components, dim=(1, 2, 3)) / normalization
 
     @torch.no_grad()
     def compute_stoi(self, clean_speech: torch.Tensor, denoised_speech: torch.Tensor):
         batch_size = clean_speech.shape[0]
-        
+
         clean_speech, denoised_speech, lengths_silent = self.remove_silent_frames(clean_speech, denoised_speech)
 
         speech = torch.cat((clean_speech, denoised_speech), dim=0)
@@ -152,15 +161,15 @@ class STOI(BaseMetric):
 
         # Ensure at least 30 frames for intermediate intelligibility
         if len(segments) == 0:
-            warnings.warn('Not enough non-silent frames. Please check your sound files', RuntimeWarning)
-            return 0
-        
+            warnings.warn("Not enough non-silent frames. Please check your sound files", RuntimeWarning, stacklevel=2)
+            return torch.tensor(0), torch.tensor(0)
+
         segments = torch.stack(segments, dim=1)
         clean_segments = segments[:batch_size]
         denoised_segments = segments[batch_size:]
 
-        equalized_denoised_segments = self.equalize_clip(clean_segments, denoised_segments) # STOI
-        
+        equalized_denoised_segments = self.equalize_clip(clean_segments, denoised_segments)  # STOI
+
         # For STOI computation: normalize equalized segments
         clean_segments_stoi = self.normalize(clean_segments.clone(), dim=3)
         equalized_denoised_segments = self.normalize(equalized_denoised_segments, dim=3)
@@ -171,15 +180,26 @@ class STOI(BaseMetric):
         clean_segments_estoi = self.normalize(clean_segments_estoi, dim=2)
         denoised_segments_estoi = self.normalize(denoised_segments_estoi, dim=2)
 
-        num_segments = torch.maximum((lengths_silent - self.n_fft) // self.hop_length - self.N + 2, torch.zeros_like(lengths_silent, device=lengths_silent.device))
-        mask = (torch.arange(clean_segments.shape[1], device=clean_segments.device).unsqueeze(0) < num_segments.unsqueeze(1)).to(clean_segments.dtype)
+        num_segments = torch.maximum(
+            (lengths_silent - self.n_fft) // self.hop_length - self.N + 2,
+            torch.zeros_like(lengths_silent, device=lengths_silent.device),
+        )
+        mask = (
+            torch.arange(clean_segments.shape[1], device=clean_segments.device).unsqueeze(0) < num_segments.unsqueeze(1)
+        ).to(clean_segments.dtype)
 
-        correlations_stoi = self.compute_correlation(clean_segments_stoi, equalized_denoised_segments, mask=mask, extended=False)
-        correlations_estoi = self.compute_correlation(clean_segments_estoi, denoised_segments_estoi, mask=mask, extended=True)
-        
+        correlations_stoi = self.compute_correlation(
+            clean_segments_stoi, equalized_denoised_segments, mask=mask, extended=False
+        )
+        correlations_estoi = self.compute_correlation(
+            clean_segments_estoi, denoised_segments_estoi, mask=mask, extended=True
+        )
+
         return correlations_stoi / num_segments, correlations_estoi / num_segments
-    
-    def compute_metric(self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor) -> list[dict[str, float]]:
+
+    def compute_metric(
+        self, clean_speech: torch.Tensor | None, denoised_speech: torch.Tensor
+    ) -> list[dict[str, float]]:
         assert clean_speech is not None
         stois, estois = self.compute_stoi(clean_speech, denoised_speech)
-        return [{"STOI": stoi.item(), "ESTOI": estoi.item()} for stoi, estoi in zip(stois, estois)]
+        return [{"STOI": stoi.item(), "ESTOI": estoi.item()} for stoi, estoi in zip(stois, estois, strict=False)]

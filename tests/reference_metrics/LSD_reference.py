@@ -1,10 +1,10 @@
+# From https://github.com/urgent-challenge/urgent2025_challenge/blob/main/evaluation_metrics/calculate_intrusive_se_metrics.py#L66C1-L90C15
 import librosa
 import numpy as np
 import torch
-from pystoi import stoi as stoi_reference
 from gpu_speech_metrics.base import BaseMetric
 
-# From https://github.com/urgent-challenge/urgent2025_challenge/blob/main/evaluation_metrics/calculate_intrusive_se_metrics.py#L66C1-L90C15
+
 def lsd_metric(ref, inf, fs, nfft=0.032, hop=0.016, p=2, eps=1.0e-08):
     """Calculate Log-Spectral Distance (LSD).
 
@@ -38,7 +38,7 @@ class LSD_reference(BaseMetric):
 
     def compute_metric(self, clean_speech: torch.Tensor, noisy_speech: torch.Tensor) -> list[dict[str, float]]:
         lsd_values = []
-        for speech, noisy_speech in zip(clean_speech, noisy_speech):
-            lsd = lsd_metric(speech.numpy(), noisy_speech.numpy(), self.sample_rate)
+        for s, ns in zip(clean_speech, noisy_speech, strict=False):
+            lsd = lsd_metric(s.numpy(), ns.numpy(), self.sample_rate)
             lsd_values.append({"LSD": float(lsd)})
         return lsd_values
