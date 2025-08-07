@@ -1,6 +1,6 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+import numpy as np
 from benchmarking.plotting.settings import DEVIATION_SETTINGS, PLOTS_DIR, RESULTS_DIR, NAME_MAPPING
 from benchmarking.plotting.utils import load_values
 
@@ -15,7 +15,8 @@ def plot_deviations(results_dir, deviation_settings):
         name_reference, device_reference, color = NAME_MAPPING[settings["metric_reference"]]
 
         sns.scatterplot(x=optimized_values, y=reference_values, ax=ax, color=color)
-        ax.set_title(settings["name"], fontsize=14)
+        maximum_deviation = np.abs(np.array(optimized_values) - np.array(reference_values)).max()
+        ax.set_title(f"{settings['name']}\nMax Deviation: {maximum_deviation:.0e}", fontsize=14)
 
         ax.set_xlabel(f"{name_optimized} ({device_optimized})", fontsize=12)
         ax.set_ylabel(f"{name_reference} ({device_reference})", fontsize=12)
