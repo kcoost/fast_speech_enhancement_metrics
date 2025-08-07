@@ -2,7 +2,7 @@
 import logging
 import torch
 from transformers import AutoModel
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 # Enable TF32 for better performance
 torch.set_float32_matmul_precision("high")

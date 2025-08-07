@@ -1,6 +1,6 @@
 import torch
 from pystoi import stoi as stoi_reference
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 
 class STOI_reference(BaseMetric):

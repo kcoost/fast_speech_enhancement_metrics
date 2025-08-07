@@ -1,6 +1,6 @@
 import pytest
 from tests.reference_metrics.SpeechBERTScore_reference import SpeechBERTScore_reference
-from gpu_speech_metrics import SpeechBERTScore
+from fast_se_metrics import SpeechBERTScore
 
 
 def speechbertscore_metric(ref, inf, sample_rate=16000, device="cuda"):

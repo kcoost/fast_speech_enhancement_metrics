@@ -1,7 +1,7 @@
 from pathlib import Path
 import torch
 import torch.nn as nn
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 INPUT_LENGTH = 9.01
 CHECKPOINT_PATH = Path(__file__).parents[1] / "checkpoints" / "SIG_BAK_OVR.pt"

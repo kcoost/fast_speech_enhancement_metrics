@@ -1,5 +1,5 @@
 import pytest
-from gpu_speech_metrics import STOI
+from fast_se_metrics import STOI
 from pystoi import stoi as stoi_reference
 
 

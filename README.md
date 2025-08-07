@@ -13,7 +13,7 @@ poetry install
 
 ```python
 import torch
-from gpu_speech_metrics import PESQ, STOI, SDR, LSD, DNSMOS, SpeechBERTScore
+from fast_se_metrics import PESQ, STOI, SDR, LSD, DNSMOS, SpeechBERTScore
 
 # Load your audio (shape: [batch_size, samples])
 # 4 samples, 10 second each at 16kHz

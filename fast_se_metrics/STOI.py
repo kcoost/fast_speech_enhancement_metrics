@@ -1,7 +1,7 @@
 import warnings
 
 import torch
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 
 class STOI(BaseMetric):

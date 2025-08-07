@@ -6,7 +6,7 @@ import json
 import os
 from tqdm import tqdm
 from benchmarking.dataloading import load_audio_data
-from gpu_speech_metrics import PESQ, SDR, STOI, LSD, DNSMOS, SpeechBERTScore
+from fast_se_metrics import PESQ, SDR, STOI, LSD, DNSMOS, SpeechBERTScore
 from tests.reference_metrics.PESQ_reference import PESQ_reference_pesq, PESQ_reference_torch_pesq
 from tests.reference_metrics.SDR_reference import SDR_reference
 from tests.reference_metrics.STOI_reference import STOI_reference

@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "gpu-speech-metrics"
+name = "fast_se_metrics"
 version = "0.1.0"
 description = ""
 authors = ["Koen Oostermeijer <koen@oostermeijer.net>"]
 readme = "README.md"
-packages = [{include = "gpu_speech_metrics"}]
+packages = [{include = "fast_se_metrics"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"

@@ -1,6 +1,6 @@
 # Based on https://github.com/urgent-challenge/urgent2025_challenge/blob/main/evaluation_metrics/calculate_intrusive_se_metrics.py
 import torch
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 
 class LSD(BaseMetric):

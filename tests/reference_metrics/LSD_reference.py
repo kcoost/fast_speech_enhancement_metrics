@@ -2,7 +2,7 @@
 import librosa
 import numpy as np
 import torch
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 
 def lsd_metric(ref, inf, fs, nfft=0.032, hop=0.016, p=2, eps=1.0e-08):

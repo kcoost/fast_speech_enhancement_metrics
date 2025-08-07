@@ -1,6 +1,6 @@
 # From https://github.com/ludlows/PESQ
 import torch
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 from pesq import pesq_batch as pesq_metric_reference
 from torch_pesq import PesqLoss

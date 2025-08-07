@@ -5,9 +5,9 @@ from scipy.signal import butter
 from torchaudio.functional import lfilter
 from torchaudio.transforms import Spectrogram
 
-from gpu_speech_metrics.utils.bark import BarkFilterBank
-from gpu_speech_metrics.utils.loudness import Loudness
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.utils.bark import BarkFilterBank
+from fast_se_metrics.utils.loudness import Loudness
+from fast_se_metrics.base import BaseMetric
 
 
 class PESQ(BaseMetric):

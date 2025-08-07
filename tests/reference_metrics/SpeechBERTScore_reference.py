@@ -9,7 +9,7 @@ import torchaudio
 import torch
 from transformers import HubertModel, Wav2Vec2Model, WavLMModel, AutoModel
 
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 # In PyTorch 2+, a warning for checkpoint mismatch is raised.
 # But it should be a false alarm according to the following issue.

@@ -1,7 +1,7 @@
 import pytest
 import torch
-from gpu_speech_metrics import PESQ
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics import PESQ
+from fast_se_metrics.base import BaseMetric
 from pesq import pesq as pesq_metric_reference
 from torch_pesq import PesqLoss
 

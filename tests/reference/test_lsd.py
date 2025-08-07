@@ -1,7 +1,7 @@
 import pytest
 import librosa
 import numpy as np
-from gpu_speech_metrics import LSD
+from fast_se_metrics import LSD
 
 
 def lsd_metric(ref, inf, fs, nfft=0.032, hop=0.016, p=2, eps=1.0e-08):

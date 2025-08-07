@@ -1,6 +1,6 @@
 import pytest
 import torchmetrics.functional.audio
-from gpu_speech_metrics import SDR
+from fast_se_metrics import SDR
 
 
 def sdr_metric(ref, inf):

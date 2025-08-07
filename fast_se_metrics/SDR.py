@@ -1,7 +1,7 @@
 import math
 import torch
 from torch.linalg import norm
-from gpu_speech_metrics.base import BaseMetric
+from fast_se_metrics.base import BaseMetric
 
 
 def _symmetric_toeplitz_solve(r_0: torch.Tensor, b: torch.Tensor) -> torch.Tensor:

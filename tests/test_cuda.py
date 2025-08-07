@@ -1,5 +1,5 @@
 import pytest
-from gpu_speech_metrics import LSD, STOI, PESQ, SDR, DNSMOS, SpeechBERTScore
+from fast_se_metrics import LSD, STOI, PESQ, SDR, DNSMOS, SpeechBERTScore
 
 
 METRICS = [LSD, STOI, PESQ, SDR, DNSMOS, SpeechBERTScore]

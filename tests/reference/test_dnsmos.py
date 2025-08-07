@@ -7,7 +7,7 @@ from onnx2torch import convert
 import torch
 import numpy as np
 import torchaudio
-from gpu_speech_metrics import DNSMOS
+from fast_se_metrics import DNSMOS
 
 SAMPLING_RATE = 16000
 INPUT_LENGTH = 9.01
