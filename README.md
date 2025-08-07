@@ -1,4 +1,4 @@
-# Fast GPU-Accelerated Speech Metrics
+# Fast Speech Enhancement Metrics
 
 A high-performance PyTorch library for computing speech quality metrics with GPU acceleration. Includes optimized implementations of PESQ, STOI, SDR, LSD, DNSMOS, and SpeechBERTScore.
 
