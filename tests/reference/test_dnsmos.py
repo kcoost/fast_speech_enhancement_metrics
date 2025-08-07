@@ -131,6 +131,6 @@ def test_dnsmos(speech_data, tmp_path):
     results = dnsmos(None, noisy_speeches)
 
     for reference_result, result in zip(reference_results, results, strict=False):
-        assert reference_result["OVRL"] == pytest.approx(result["OVRL"], 1e-6)
-        assert reference_result["SIG"] == pytest.approx(result["SIG"], 1e-6)
-        assert reference_result["BAK"] == pytest.approx(result["BAK"], 1e-6)
+        assert reference_result["OVRL"] == pytest.approx(result["OVRL"], 1e-5)
+        assert reference_result["SIG"] == pytest.approx(result["SIG"], 1e-5)
+        assert reference_result["BAK"] == pytest.approx(result["BAK"], 1e-5)

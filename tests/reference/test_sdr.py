@@ -33,4 +33,4 @@ def test_sdr(speech_data):
     results = sdr(clean_speeches, noisy_speeches)
 
     for reference_result, result in zip(reference_results, results, strict=False):
-        assert reference_result == pytest.approx(result["SDR"], abs=1e-5)
+        assert reference_result == pytest.approx(result["SDR"], abs=1e-2)

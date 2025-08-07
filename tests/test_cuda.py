@@ -10,10 +10,10 @@ def test_device(speech_data, metric_class):
     speech = speech_data["speech"]
     noisy_speech = speech_data["noisy_speech"]
 
-    metric = metric_class()
+    metric = metric_class(use_gpu=False)
     cpu_results = metric(speech, noisy_speech)
 
-    metric = metric_class(device="cuda")
+    metric = metric_class(use_gpu=True)
     gpu_results = metric(speech, noisy_speech)
 
     for cpu_result, gpu_result in zip(cpu_results, gpu_results, strict=False):

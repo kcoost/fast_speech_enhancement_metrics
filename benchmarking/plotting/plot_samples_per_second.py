@@ -27,6 +27,33 @@ def plot_samples_per_second(results_dir):
             palette=color_mapping,
         )
 
+        ours_gpu_value = ax.patches[-1].get_height()
+        baseline_value = ax.patches[0].get_height()
+        ax.axhline(ours_gpu_value, color="gray", linestyle="--", linewidth=1)
+
+        x_line = ax.patches[0].get_x() + 4 * ax.patches[0].get_width() / 5
+        # Draw an arrow from baseline_value to ours_gpu_value
+        ax.annotate(
+            "",
+            xy=(x_line, ours_gpu_value),
+            xytext=(x_line, baseline_value),
+            arrowprops=dict(arrowstyle="->", color="black", linewidth=1),
+        )
+        ax.text(
+            x_line,
+            np.sqrt(baseline_value * ours_gpu_value),
+            (
+                f"{int(ours_gpu_value / baseline_value)}x "
+                if (ours_gpu_value / baseline_value) >= 10
+                else f"{ours_gpu_value / baseline_value:.1f}x "
+            ),
+            ha="right",
+            va="center",
+            fontsize=12,
+            color="black",
+            fontweight="bold",
+        )
+
         ax.set_xticklabels(metric_labels)
 
         for tick, device in zip(ax.get_xticks(), device_labels, strict=False):
