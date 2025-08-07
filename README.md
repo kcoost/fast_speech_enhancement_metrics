@@ -67,7 +67,3 @@ python plot_results.py
 ## Acknowledgments
 
 The PESQ implementation is based on the excellent work by [audiolabs/torch-pesq](https://github.com/audiolabs/torch-pesq).
-
-## License
-
-TODO
