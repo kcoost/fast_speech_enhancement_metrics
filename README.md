@@ -46,14 +46,14 @@ while maintaining results that are extremely close to the originals
 
 ### Available Metrics
 
-| Metric | Description | Higher is Better |
-|--------|-------------|------------------|
-| **PESQ** | Perceptual Evaluation of Speech Quality (ITU P.862) | ✓ |
-| **STOI** | Short-Time Objective Intelligibility | ✓ |
-| **SDR** | Signal-to-Distortion Ratio | ✓ |
-| **LSD** | Log-Spectral Distance | ✗ |
-| **DNSMOS** | Deep Noise Suppression Mean Opinion Score | ✓ |
-| **SpeechBERTScore** | Semantic similarity using speech embeddings | ✓ |
+| Metric | Description | Reference | Reference Implementation |
+|--------|-------------|------------------|------------------|
+| **PESQ** | Perceptual Evaluation of Speech Quality (ITU P.862) | [Berends et al.](https://www.researchgate.net/publication/243773287_Perceptual_evaluation_of_speech_quality_PESQ_-_The_new_ITU_standard_for_end-to-end_speech_quality_assessment_-_Part_II_-_Psychoacoustic_model) | [ludlows](https://github.com/ludlows/PESQ), [AudioLabs](https://github.com/audiolabs/torch-pesq) |
+| **(E)STOI** | (Extended) Short-Time Objective Intelligibility | [Taal et al.](https://ieeexplore.ieee.org/document/5713237), [Jensen & Taal](https://ieeexplore.ieee.org/document/7539284) | [mpariente](https://github.com/mpariente/pystoi) |
+| **SDR** | Signal-to-Distortion Ratio | [Vincent et al.](https://ieeexplore.ieee.org/abstract/document/1643671), [Scheibler](https://arxiv.org/abs/2110.06440) | [TorchMetrics](https://lightning.ai/docs/torchmetrics/stable/audio/signal_distortion_ratio.html) |
+| **LSD** | Log-Spectral Distance | [Braun & Tashev](https://arxiv.org/abs/2009.12286) | [Urgent2025](https://github.com/urgent-challenge/urgent2025_challenge/blob/main/evaluation_metrics/calculate_intrusive_se_metrics.py#L66) |
+| **DNSMOS** | Deep Noise Suppression Mean Opinion Score | [Reddy et al.](https://arxiv.org/abs/2010.15258) | [DNS-Challenge](https://github.com/microsoft/DNS-Challenge/blob/master/DNSMOS/dnsmos_local.py) |
+| **SpeechBERTScore** | Semantic similarity using speech embeddings | [Saeki et al.](https://arxiv.org/abs/2401.16812) | [Urgent2025](https://github.com/urgent-challenge/urgent2025_challenge/blob/main/evaluation_metrics/calculate_speechbert_score.py) |
 
 ## Benchmarking
 
