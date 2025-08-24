@@ -1,18 +1,18 @@
 [tool.poetry]
 name = "fast_se_metrics"
-version = "0.1.0"
+version = "1.0.0"
 description = ""
 authors = ["Koen Oostermeijer <koen@oostermeijer.net>"]
 readme = "README.md"
 packages = [{include = "fast_se_metrics"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.12,<3.14"
 datasets = "^3.6.0"
 numpy = "<=2.0" # Needed for dataloading
-torch = "^2.7.1"
-torchaudio = "^2.7.1"
-torchvision = "^0.22.1"
+torch = "^2.8.0"
+torchvision = "^0.23.0"
+torchaudio = "^2.8.0"
 transformers = "^4.52.4"
 pkginfo = "^1.12.1.2"
 onnx2torch = "^1.5.15"
@@ -28,7 +28,7 @@ torchtyping ="^0.1.5"
 pystoi = "^0.4.1"
 torchmetrics = "^1.7.3"
 librosa = "^0.11.0"
-pre-commit = "^4.2.0"
+pre-commit = "^4.3.0"
 ruff = "^0.12.3"
 
 [tool.ruff]
