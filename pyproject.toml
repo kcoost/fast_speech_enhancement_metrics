@@ -17,6 +17,7 @@ transformers = "^4.52.4"
 pkginfo = "^1.12.1.2"
 onnx2torch = "^1.5.15"
 scipy-stubs = "^1.15.3.0"
+scipy = "^1.16.1"
 
 
 [tool.poetry.group.dev.dependencies]

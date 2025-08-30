@@ -4,7 +4,7 @@ import torch.nn as nn
 from fast_se_metrics.base import BaseMetric
 
 INPUT_LENGTH = 9.01
-CHECKPOINT_PATH = Path(__file__).parents[1] / "checkpoints" / "SIG_BAK_OVR.pt"
+CHECKPOINT_PATH = Path(__file__).parent / "checkpoints" / "SIG_BAK_OVR.pt"
 
 
 class DNSMOSNet(nn.Module):
